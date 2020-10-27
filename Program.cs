@@ -1,4 +1,8 @@
 ﻿using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.IO;
+using System.Threading;
 using NN_lib;
 
 namespace MainApp
@@ -13,7 +17,8 @@ namespace MainApp
             Console.WriteLine("Enter neural network path");
             string NN_path = Console.ReadLine();
 
-            My_Lib.ParallelProcess(dir, NN_path);
+            My_Lib start_session = new My_Lib();
+            start_session.Starter(dir, NN_path);
         }
     }
 }

@@ -1,40 +1,39 @@
 ﻿using System;
-using SixLabors.ImageSharp; 
-using SixLabors.ImageSharp.PixelFormats;
-using System.Linq;
-using SixLabors.ImageSharp.Processing;
-using Microsoft.ML.OnnxRuntime.Tensors;
-using Microsoft.ML.OnnxRuntime;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
-using System.Collections.Concurrent;
+using Microsoft.ML.OnnxRuntime;
+using Microsoft.ML.OnnxRuntime.Tensors;
+using SixLabors.ImageSharp; 
+using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
 
 namespace NN_lib
 {
+    public class Info 
+    {
+        public string path;
+        public  string kind;
+        public float probability;
+        public Info(string path, string kind, float probability)
+        {
+            this.path = path;
+            this.kind = kind;
+            this.probability = probability;
+        }   
+    }
+
     public class My_Lib
     {
         public static InferenceSession session;
 
-        public struct Info
-        {
-            string path;
-            string kind;
+
+        public ConcurrentQueue<Info> plenty_of_images;
 
 
-            public Info(string path, string kind) {
-                if (path == null || kind == null) throw new ArgumentException();
-                this.path = path;
-                this.kind = kind;
-            }
-            public override string ToString()  
-            {
-                return $"{path} {kind}";
-            }
-        }
-
-
-        public static void Identify(string image_path, string NN_path, int cnt)
+        public void Identify(string image_path, string NN_path, int cnt)
         {          
 
             using var image = Image.Load<Rgb24>((string) image_path ?? ".jpg");
@@ -85,80 +84,60 @@ namespace NN_lib
             var sum = output.Sum(x => (float)Math.Exp(x));
             var softmax = output.Select(x => (float)Math.Exp(x) / sum);
 
-            
-            foreach(var p in softmax
-                .Select((x, i) => new { path = image_path, Label = classLabels[i], Confidence = x })
-                .OrderByDescending(x => x.Confidence)
-                .Take(1))
-                
-                
-               
-                Console.WriteLine($"{p.path} is {p.Label} with confidence {p.Confidence}");
-
             int i_max = softmax.ToList().IndexOf(softmax.Max());
-            Info tmp = new Info(image_path, classLabels[i_max]);   
+
+            foreach(var p in softmax
+                        .Select((x, g) => new { Label = classLabels[g], Confidence = x })
+                        .OrderByDescending(x => x.Confidence)
+                        .Take(1))
+
+
+            Make_Queue(new Info((string)image_path, classLabels[i_max], p.Confidence), plenty_of_images);
         }
-        
-        public static ConcurrentQueue<string> plenty_of_images;
-        public delegate void AccountHandler(object sender, EventArgs e);
-        public event AccountHandler Notify;
-        public void Make_Queue(Info res, ConcurrentQueue<string> plenty_of_images)
+
+
+        public void Make_Queue(Info res, ConcurrentQueue<Info> plenty_of_images)
         {
-            plenty_of_images.Enqueue(res.ToString());
+            plenty_of_images.Enqueue(res);
             Notify?.Invoke(plenty_of_images, new EventArgs());
         }
+        
+        
+        public delegate void AccountHandler(object sender, EventArgs e);
+
+        public event AccountHandler Notify;
+        
+
+        public static CancellationTokenSource cts = new CancellationTokenSource();
 
 
-        public static CancellationTokenSource cts;
-        public static CancellationTokenSource ctsLast;
+        public void Stop()
+        {
+            cts.Cancel();
+        }
 
 
-        public static void ParallelProcess(string dir_im_path, string NN_path)
+        public static int FinalCountDown;
+
+
+        public void ParallelProcess(string dir_im_path, string NN_path)
         {
             string[] images = Directory.GetFiles(dir_im_path, "*.jpg");
 
-            plenty_of_images = new ConcurrentQueue<string>();
-
-            cts = new CancellationTokenSource();
-            ctsLast = new CancellationTokenSource();
-
-            Thread cancelTread = new Thread(() =>
-            {
-                while (true)
-                {
-                    if (My_Lib.ctsLast.Token.IsCancellationRequested)
-                    {
-                        cts.Cancel();
-                        break;
-                    }
-                    if (Console.KeyAvailable && Console.ReadKey(true).Key == ConsoleKey.S)
-                    {
-                        cts.Cancel();
-                        break;
-                    }
-                }
-            }
-            );
-            cancelTread.Start();
-
+            plenty_of_images = new ConcurrentQueue<Info>();
 
             var events = new AutoResetEvent[images.Length];
-
+            
             for (int i = 0; i < images.Length; i++)
             {
                 events[i] = new AutoResetEvent(false);
-
-                ThreadPool.QueueUserWorkItem(tmp =>
-                {
+                ThreadPool.QueueUserWorkItem(tmp => 
+                { 
                     int count = (int)tmp;
-
                     if (!cts.Token.IsCancellationRequested)
                         Identify(images[count], NN_path, count);
+                    Interlocked.Increment(ref FinalCountDown);
                     events[count].Set();
-                    if (count == images.Length-1)
-                    {
-                        ctsLast.Cancel();
-                    }
 
                 }, i);
             }
@@ -168,11 +147,46 @@ namespace NN_lib
                 events[i].WaitOne();
             }
 
-            cancelTread.Join();
+        }        
 
+
+        static void Writer(object sender, EventArgs e)
+        {
+            Info item;
+            if ((ConcurrentQueue<Info>)sender != null)
+            {
+                ((ConcurrentQueue<Info>)sender).TryDequeue(out item);
+                Console.WriteLine($"Path of File: {item.path} output: {item.kind}, {item.probability}");
+            }
         }
-       
-        
+
+
+        public My_Lib(){}
+
+
+        public void Starter(string dir_im_path, string NN_path)
+        {
+            My_Lib start_session = new My_Lib();
+            start_session.Notify += Writer;
+
+            Thread cancelTread = new Thread(() =>
+            {
+                while (true)
+                {
+                    if (Console.KeyAvailable && Console.ReadKey(true).Key == ConsoleKey.S)
+                    {
+                        start_session.Stop();
+                        break;
+                    }
+                    if (My_Lib.FinalCountDown == Directory.GetFiles(dir_im_path, "*.jpg").Length)
+                        break;
+                }
+            }
+            );
+            cancelTread.Start();
+            start_session.ParallelProcess(dir_im_path, NN_path);
+        }
+
 
         static readonly string[] classLabels = new[] 
         {   
