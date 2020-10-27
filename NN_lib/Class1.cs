@@ -6,23 +6,23 @@ using System.Linq;
 using System.Threading;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
-using SixLabors.ImageSharp; 
+using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
 namespace NN_lib
 {
-    public class Info 
+    public class Info
     {
         public string path;
-        public  string kind;
+        public string kind;
         public float probability;
         public Info(string path, string kind, float probability)
         {
             this.path = path;
             this.kind = kind;
             this.probability = probability;
-        }   
+        }
     }
 
     public class My_Lib
@@ -34,10 +34,10 @@ namespace NN_lib
 
 
         public void Identify(string image_path, string NN_path, int cnt)
-        {          
+        {
 
-            using var image = Image.Load<Rgb24>((string) image_path ?? ".jpg");
-                    
+            using var image = Image.Load<Rgb24>((string)image_path ?? ".jpg");
+
             const int TargetWidth = 224;
             const int TargetHeight = 224;
 
@@ -57,7 +57,7 @@ namespace NN_lib
             var mean = new[] { 0.485f, 0.456f, 0.406f };
             var stddev = new[] { 0.229f, 0.224f, 0.225f };
             for (int y = 0; y < TargetHeight; y++)
-            {           
+            {
                 Span<Rgb24> pixelSpan = image.GetPixelRowSpan(y);
                 for (int x = 0; x < TargetWidth; x++)
                 {
@@ -66,13 +66,13 @@ namespace NN_lib
                     input[0, 2, y, x] = ((pixelSpan[x].B / 255f) - mean[2]) / stddev[2];
                 }
             }
-            
+
             session = new InferenceSession(NN_path);
             // Подготавливаем входные данные нейросети. Имя input задано в файле модели
             //using var session = new InferenceSession(NN_path); 
-            var inputs = new List<NamedOnnxValue>  
-            { 
-                NamedOnnxValue.CreateFromTensor(session.InputMetadata.Keys.First(), input) 
+            var inputs = new List<NamedOnnxValue>
+            {
+                NamedOnnxValue.CreateFromTensor(session.InputMetadata.Keys.First(), input)
             };
 
 
@@ -86,13 +86,13 @@ namespace NN_lib
 
             int i_max = softmax.ToList().IndexOf(softmax.Max());
 
-            foreach(var p in softmax
+            foreach (var p in softmax
                         .Select((x, g) => new { Label = classLabels[g], Confidence = x })
                         .OrderByDescending(x => x.Confidence)
                         .Take(1))
 
 
-            Make_Queue(new Info((string)image_path, classLabels[i_max], p.Confidence), plenty_of_images);
+                Make_Queue(new Info((string)image_path, classLabels[i_max], p.Confidence), plenty_of_images);
         }
 
 
@@ -101,12 +101,12 @@ namespace NN_lib
             plenty_of_images.Enqueue(res);
             Notify?.Invoke(plenty_of_images, new EventArgs());
         }
-        
-        
+
+
         public delegate void AccountHandler(object sender, EventArgs e);
 
         public event AccountHandler Notify;
-        
+
 
         public static CancellationTokenSource cts = new CancellationTokenSource();
 
@@ -127,12 +127,12 @@ namespace NN_lib
             plenty_of_images = new ConcurrentQueue<Info>();
 
             var events = new AutoResetEvent[images.Length];
-            
+
             for (int i = 0; i < images.Length; i++)
             {
                 events[i] = new AutoResetEvent(false);
-                ThreadPool.QueueUserWorkItem(tmp => 
-                { 
+                ThreadPool.QueueUserWorkItem(tmp =>
+                {
                     int count = (int)tmp;
                     if (!cts.Token.IsCancellationRequested)
                         Identify(images[count], NN_path, count);
@@ -147,7 +147,7 @@ namespace NN_lib
                 events[i].WaitOne();
             }
 
-        }        
+        }
 
 
         static void Writer(object sender, EventArgs e)
@@ -161,7 +161,7 @@ namespace NN_lib
         }
 
 
-        public My_Lib(){}
+        public My_Lib() { }
 
 
         public void Starter(string dir_im_path, string NN_path)
@@ -188,8 +188,8 @@ namespace NN_lib
         }
 
 
-        static readonly string[] classLabels = new[] 
-        {   
+        static readonly string[] classLabels = new[]
+        {
             "tench",
             "goldfish",
             "great white shark",
