@@ -23,7 +23,7 @@ namespace UserInterfaceRecognition
         public MainWindow()
         {
             InitializeComponent();
-            this.DataContext = new RecognitionViewModel();
+            this.DataContext = new NN_output();
         }
     }
 }

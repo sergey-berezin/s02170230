@@ -24,12 +24,12 @@
             <ColumnDefinition Width="400" />
             <ColumnDefinition Width="400" />
         </Grid.ColumnDefinitions>
-        <TextBlock Grid.Row="0" Grid.Column="0" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="20" FontFamily="Times New Roman Bold" ><Run Language="ru-ru" Text="Опознанные классы"/></TextBlock>
-        <Button Grid.Column="0" Grid.Row="2" Content="Начать"  Command="{Binding StartRecognitionCommand}"/>
-        <ListBox Grid.Row="1" Grid.Column="0" ItemsSource="{Binding ClassObserv}" IsSynchronizedWithCurrentItem="True" SelectedItem="{Binding SelectedClass}" />
-        <ListBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding SelectedClassObserv}" ItemTemplate="{StaticResource Images_Template}" IsSynchronizedWithCurrentItem="True" />
-        <Button Grid.Row="2" Grid.Column="1" Content="Отсенить" Command="{Binding CancelRecognitionCommand}" Click="Button_Click"/>
-        <TextBlock Grid.Row="0" Grid.Column="1" HorizontalAlignment="Left" VerticalAlignment="Top" FontSize="20" FontFamily="Times New Roman Bold" Margin="74,25,0,0" ><Run Language="ru-ru" Text="Изображения выбранного класса"/></TextBlock>
+        <TextBlock Grid.Column="0" Text="Виды " HorizontalAlignment="Left" VerticalAlignment="Center" FontSize="20" FontFamily="Times New Roman Bold" Margin="71,0,0,0" />
+        <Button Grid.Column="0" Grid.Row="1" Content="Начать"  Command="{Binding StartC}" Margin="0,197,172,103"/>
+        <ListBox Grid.Row="1" Grid.Column="0" ItemsSource="{Binding ClassObserv}" IsSynchronizedWithCurrentItem="True" SelectedItem="{Binding SelectedClass}" Margin="0,0,172,158" />
+        <ListBox Grid.Row="1" ItemsSource="{Binding SelectedClassObserv}" ItemTemplate="{StaticResource Images_Template}" IsSynchronizedWithCurrentItem="True" Grid.ColumnSpan="2" Margin="238,0,10,22" />
+        <Button Grid.Row="1" Content="Закончить" Command="{Binding CancelC}" Margin="0,252,172,48"/>
+        <TextBlock Text="Изображния вида" HorizontalAlignment="Left" VerticalAlignment="Center" FontSize="20" FontFamily="Times New Roman Bold" Grid.ColumnSpan="2" Margin="358,0,0,0" />
 
 
     </Grid>

@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Image_recog_lib\NN_lib.csproj" />
+    <ProjectReference Include="..\NN_lib\NN_lib.csproj" />
   </ItemGroup>
 
 </Project>
