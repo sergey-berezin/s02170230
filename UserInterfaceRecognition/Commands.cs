@@ -12,7 +12,7 @@ namespace UserInterfaceRecognition
         private readonly Predicate<object> canExecute;
         private readonly Action<object> execute;
 
-        public Commands(Action<object> execute): this(execute, null)
+        public Commands(Action<object> execute) : this(execute, null)
         {
         }
 

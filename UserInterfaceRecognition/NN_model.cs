@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -18,16 +20,20 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
+using Microsoft.EntityFrameworkCore;
 
 namespace UserInterfaceRecognition
 {
-    public class NN_model: INotifyPropertyChanged
+    public class RecognitionModel : INotifyPropertyChanged
     {
         private string classLabel;
 
+
         public event PropertyChangedEventHandler PropertyChanged;
 
-        private BitmapImage image;
+        private Blob blobImage;
+        [Key]
+        public int Id { get; set; }
         public string Path { get; set; }
 
         public string ClassLabel
@@ -43,29 +49,30 @@ namespace UserInterfaceRecognition
             }
         }
 
-        public float probability { get; set; }
-
-        public BitmapImage Image
+        public Blob Image
         {
             get
             {
-                return image;
+                return blobImage;
             }
 
             set
             {
-                image = value;
+                blobImage = value;
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("Image"));
             }
         }
 
-        public NN_model(string name, string label, float probability)
+        public RecognitionModel(string name, string label)
         {
             this.ClassLabel = label;
             this.Path = name;
-            this.probability = probability;
-            this.Image = new BitmapImage(new Uri(name));
+            this.Image = new Blob(name);
         }
+
+
+        public RecognitionModel()
+        { }
     }
 
 }

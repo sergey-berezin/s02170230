@@ -6,38 +6,41 @@ using System.Linq;
 using System.Threading;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
-using SixLabors.ImageSharp; 
+using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
 namespace NN_lib
 {
-    public class Info 
+    public class PredictionResult
     {
-        public string path;
-        public  string kind;
-        public float probability;
-        public Info(string path, string kind, float probability)
+        public string Path;
+        public string ClassLabel;
+        public PredictionResult(string path, string classLabel)
         {
-            this.path = path;
-            this.kind = kind;
-            this.probability = probability;
-        }   
+            this.Path = path;
+            this.ClassLabel = classLabel;
+        }
     }
-
-    public class My_Lib
+    public class Class1
     {
-        public static InferenceSession session;
+        public static InferenceSession Session;
 
+        public Class1(string modelPath = "..\\..\\..\\..\\NN_lib\\resnet18-v1-7.onnx")
+        {
+            Session = new InferenceSession(modelPath);
 
-        public ConcurrentQueue<Info> plenty_of_images;
+        }
 
+        public void Stop()
+        {
+            cts.Cancel();
+        }
 
-        public void Identify(string image_path, int cnt)
-        {          
+        public void ImageProcess(string imagePath, int tmp)
+        {
+            using var image = Image.Load<Rgb24>((string)imagePath ?? "image.jpg");
 
-            using var image = Image.Load<Rgb24>((string) image_path ?? ".jpg");
-                    
             const int TargetWidth = 224;
             const int TargetHeight = 224;
 
@@ -46,18 +49,17 @@ namespace NN_lib
             {
                 x.Resize(new ResizeOptions
                 {
-                    Size = new Size(TargetWidth, TargetHeight),
+                    Size = new SixLabors.ImageSharp.Size(TargetWidth, TargetHeight),
                     Mode = ResizeMode.Crop // Сохраняем пропорции обрезая лишнее
                 });
             });
-
 
             // Перевод пикселов в тензор и нормализация
             var input = new DenseTensor<float>(new[] { 1, 3, TargetHeight, TargetWidth });
             var mean = new[] { 0.485f, 0.456f, 0.406f };
             var stddev = new[] { 0.229f, 0.224f, 0.225f };
             for (int y = 0; y < TargetHeight; y++)
-            {           
+            {
                 Span<Rgb24> pixelSpan = image.GetPixelRowSpan(y);
                 for (int x = 0; x < TargetWidth; x++)
                 {
@@ -66,129 +68,58 @@ namespace NN_lib
                     input[0, 2, y, x] = ((pixelSpan[x].B / 255f) - mean[2]) / stddev[2];
                 }
             }
-            
-            session = new InferenceSession("..\\..\\..\\..\\NN_lib\\resnet18-v1-7.onnx");
-            // Подготавливаем входные данные нейросети. Имя input задано в файле модели
-            //using var session = new InferenceSession(NN_path); 
-            var inputs = new List<NamedOnnxValue>  
-            { 
-                NamedOnnxValue.CreateFromTensor(session.InputMetadata.Keys.First(), input) 
-            };
-
 
             // Вычисляем предсказание нейросетью
-            using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> results = session.Run(inputs);
+            var inputs = new List<NamedOnnxValue>
+            {
+                NamedOnnxValue.CreateFromTensor(Session.InputMetadata.Keys.First(), input)
+            };
+            using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> results = Session.Run(inputs);
 
-            // Получаем 1000 выходов и считаем для них softmax
             var output = results.First().AsEnumerable<float>().ToArray();
             var sum = output.Sum(x => (float)Math.Exp(x));
             var softmax = output.Select(x => (float)Math.Exp(x) / sum);
 
-            int i_max = softmax.ToList().IndexOf(softmax.Max());
+            int index = softmax.ToList().IndexOf(softmax.Max());
 
-            foreach(var p in softmax
-                        .Select((x, g) => new { Label = classLabels[g], Confidence = x })
-                        .OrderByDescending(x => x.Confidence)
-                        .Take(1))
+            Notify?.Invoke(new PredictionResult((string)imagePath, classLabels[index]), new EventArgs(), false);
 
-
-            /*Make_Queue(new Info((string)image_path, classLabels[i_max], p.Confidence), plenty_of_images);*/
-            Notify?.Invoke(new Info((string)image_path, classLabels[i_max], p.Confidence), new EventArgs());
         }
-
-
-        /*public void Make_Queue(Info res, ConcurrentQueue<Info> plenty_of_images)
-        {
-            plenty_of_images.Enqueue(res);
-            Notify?.Invoke(plenty_of_images, new EventArgs());
-        }*/
-
-        public event AccountHandler Notify;
-
-        public delegate void AccountHandler(Info sender, EventArgs e);
-        
+        public delegate void PredictionHandler(PredictionResult sender, EventArgs e, bool flag);
+        public event PredictionHandler Notify;
         public static CancellationTokenSource cts = new CancellationTokenSource();
+        public static int endSignal;
 
-
-        public void Stop()
+        public void ParallelProcess(List<string> files)
         {
-            cts.Cancel();
-        }
+
+            var events = new AutoResetEvent[files.Count];
 
 
-        public static int FinalCountDown;
-
-
-        public void ParallelProcess(string dir_im_path)
-        {
-            string[] images = Directory.GetFiles(dir_im_path, "*.jpg");
-
-            plenty_of_images = new ConcurrentQueue<Info>();
-
-            var events = new AutoResetEvent[images.Length];
-            
-            for (int i = 0; i < images.Length; i++)
+            for (int i = 0; i < files.Count; i++)
             {
                 events[i] = new AutoResetEvent(false);
-                ThreadPool.QueueUserWorkItem(tmp => 
-                { 
+                ThreadPool.QueueUserWorkItem(tmp =>
+                {
                     int count = (int)tmp;
                     if (!cts.Token.IsCancellationRequested)
-                        Identify(images[count], count);
-                    Interlocked.Increment(ref FinalCountDown);
+                        ImageProcess(files[count], count);
+                    Interlocked.Increment(ref endSignal);
                     events[count].Set();
 
                 }, i);
             }
 
-            for (int i = 0; i < images.Length; i++)
+
+            for (int i = 0; i < files.Count; i++)
             {
                 events[i].WaitOne();
             }
 
-        }        
-
-
-        static void Writer(object sender, EventArgs e)
-        {
-            Info item;
-            if ((ConcurrentQueue<Info>)sender != null)
-            {
-                ((ConcurrentQueue<Info>)sender).TryDequeue(out item);
-                Console.WriteLine($"Path of File: {item.path} output: {item.kind}, {item.probability}");
-            }
         }
 
-
-        public My_Lib(){}
-
-
-        public void Starter(string dir_im_path, string NN_path)
+        static readonly string[] classLabels = new[]
         {
-            My_Lib start_session = new My_Lib();
-            start_session.Notify += Writer;
-
-            Thread cancelTread = new Thread(() =>
-            {
-                while (true)
-                {
-                    if (Console.KeyAvailable && Console.ReadKey(true).Key == ConsoleKey.S)
-                    {
-                        start_session.Stop();
-                        break;
-                    }
-                    if (My_Lib.FinalCountDown == Directory.GetFiles(dir_im_path, "*.jpg").Length)
-                        break;
-                }
-            }
-            );
-            cancelTread.Start();
-            start_session.ParallelProcess(dir_im_path);
-        }
-
-
-        static readonly string[] classLabels = new[] 
-        {   
             "tench",
             "goldfish",
             "great white shark",
@@ -1190,7 +1121,5 @@ namespace NN_lib
             "ear",
             "toilet paper"
         };
-
     }
-
 }
